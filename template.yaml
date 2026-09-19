@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless expense tracker API built with Lambda and DynamoDB
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ExpensesTable
+
+Resources:
+  ExpenseApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowHeaders: [Content-Type]
+        AllowMethods: [GET, POST, DELETE, OPTIONS]
+
+  ExpenseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ExpensesTable
+      Events:
+        CreateExpense:
+          Type: HttpApi
+          Properties: {ApiId: !Ref ExpenseApi, Path: /expenses, Method: POST}
+        ListExpenses:
+          Type: HttpApi
+          Properties: {ApiId: !Ref ExpenseApi, Path: /expenses, Method: GET}
+        DeleteExpense:
+          Type: HttpApi
+          Properties: {ApiId: !Ref ExpenseApi, Path: /expenses/{id}, Method: DELETE}
+        MonthlySummary:
+          Type: HttpApi
+          Properties: {ApiId: !Ref ExpenseApi, Path: /summary/{month}, Method: GET}
+
+  ExpensesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - {AttributeName: id, AttributeType: S}
+      KeySchema:
+        - {AttributeName: id, KeyType: HASH}
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub https://${ExpenseApi}.execute-api.${AWS::Region}.amazonaws.com
+
